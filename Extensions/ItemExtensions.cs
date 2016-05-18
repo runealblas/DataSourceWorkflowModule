@@ -13,7 +13,7 @@ using Sitecore.SecurityModel;
 namespace HI.Shared.DataSourceWorkflowModule.Extensions
 {
     public static class ItemExtensions
-    {	
+    {
         private const string ContentEditorUrlFormat = "{0}://{1}/sitecore/shell/Applications/Content Editor?id={2}&amp;sc_content=master&amp;fo={2}&amp;vs={3}&amp;la={4}";
 
         public static RenderingReference[] GetRenderingReferences(this Item i)
@@ -26,11 +26,11 @@ namespace HI.Shared.DataSourceWorkflowModule.Extensions
             var list = new List<Item>();
             foreach (RenderingReference reference in i.GetRenderingReferences())
             {
-                list.AddUnqiueDataSourceItem(reference.GetDataSourceItem());
+                list.AddUnqiueDataSourceItem(reference.GetDataSourceItem(i.Language));
 
                 if (includePersonalizationDataSourceItems)
                 {
-                    foreach (var dataSourceItem in reference.GetPersonalizationDataSourceItem())
+                    foreach (var dataSourceItem in reference.GetPersonalizationDataSourceItem(i.Language))
                     {
                         list.AddUnqiueDataSourceItem(dataSourceItem);
                     }
@@ -52,7 +52,7 @@ namespace HI.Shared.DataSourceWorkflowModule.Extensions
             List<Item> list = new List<Item>();
             foreach (RenderingReference reference in i.GetRenderingReferences())
             {
-                Item dataSourceItem = reference.GetDataSourceItem();
+                Item dataSourceItem = reference.GetDataSourceItem(i.Language);
                 if (dataSourceItem != null)
                 {
                     list.Add(dataSourceItem);
@@ -61,11 +61,11 @@ namespace HI.Shared.DataSourceWorkflowModule.Extensions
             return list;
         }
 
-        public static Item GetDataSourceItem(this RenderingReference reference)
+        public static Item GetDataSourceItem(this RenderingReference reference, Language language)
         {
             if (reference != null)
             {
-                return GetDataSourceItem(reference.Settings.DataSource, reference.Database);
+                return GetDataSourceItem(reference.Settings.DataSource, reference.Database, language);
             }
             return null;
         }
@@ -75,17 +75,17 @@ namespace HI.Shared.DataSourceWorkflowModule.Extensions
             var list = new List<Item>();
             foreach (var reference in i.GetRenderingReferences())
             {
-                list.AddRange(reference.GetPersonalizationDataSourceItem());
+                list.AddRange(reference.GetPersonalizationDataSourceItem(i.Language));
             }
             return list;
         }
 
-        private static IEnumerable<Item> GetPersonalizationDataSourceItem(this RenderingReference reference)
+        private static IEnumerable<Item> GetPersonalizationDataSourceItem(this RenderingReference reference, Language language)
         {
             var list = new List<Item>();
-            if (reference != null && reference.Settings.Rules != null && reference.Settings.Rules.Count > 0)
+            if (reference?.Settings.Rules != null && reference.Settings.Rules.Count > 0)
             {
-                list.AddRange(reference.Settings.Rules.Rules.SelectMany(r => r.Actions).OfType<SetDataSourceAction<ConditionalRenderingsRuleContext>>().Select(setDataSourceAction => GetDataSourceItem(setDataSourceAction.DataSource, reference.Database)).Where(dataSourceItem => dataSourceItem != null));
+                list.AddRange(reference.Settings.Rules.Rules.SelectMany(r => r.Actions).OfType<SetDataSourceAction<ConditionalRenderingsRuleContext>>().Select(setDataSourceAction => GetDataSourceItem(setDataSourceAction.DataSource, reference.Database, language)).Where(dataSourceItem => dataSourceItem != null));
             }
             return list;
         }
@@ -103,18 +103,18 @@ namespace HI.Shared.DataSourceWorkflowModule.Extensions
         private static IEnumerable<Item> GetMultiVariateTestDataSourceItems(this RenderingReference reference)
         {
             var list = new List<Item>();
-            if (reference != null && !string.IsNullOrEmpty(reference.Settings.MultiVariateTest))
+            if (!string.IsNullOrEmpty(reference?.Settings.MultiVariateTest))
             {
                 using (new SecurityDisabler())
                 {
                     // Sitecore 7 to Sitecore 8:
-                    var mvVariateTestForLang = Sitecore.Analytics.Testing.TestingUtils.TestingUtil.MultiVariateTesting.GetVariableItem(reference);
-                    
+                    //var mvVariateTestForLang = Sitecore.Analytics.Testing.TestingUtils.TestingUtil.MultiVariateTesting.GetVariableItem(reference);
+
                     // Sitecore 8.1 and above:
-                    //var contentTestStore = new Sitecore.ContentTesting.Data.SitecoreContentTestStore();
-                    //var mvVariateTestForLang =  contentTestStore.GetMultivariateTestVariable(reference, reference.Language);
-                    
-                    var variableItem = (mvVariateTestForLang != null) ? mvVariateTestForLang.InnerItem : null;
+                    var contentTestStore = new Sitecore.ContentTesting.Data.SitecoreContentTestStore();
+                    var mvVariateTestForLang =  contentTestStore.GetMultivariateTestVariable(reference, reference.Language);
+
+                    var variableItem = mvVariateTestForLang?.InnerItem;
                     if (variableItem == null) return list;
                     foreach (Item mvChild in variableItem.Children)
                     {
@@ -143,12 +143,12 @@ namespace HI.Shared.DataSourceWorkflowModule.Extensions
             }
         }
 
-        private static Item GetDataSourceItem(string id, Database db)
+        private static Item GetDataSourceItem(string id, Database db, Language language)
         {
             Guid itemId;
             return Guid.TryParse(id, out itemId)
-                                    ? db.GetItem(new ID(itemId))
-                                    : db.GetItem(id);
+                                    ? db.GetItem(new ID(itemId), language)
+                                    : db.GetItem(id, language);
         }
 
         public static string GetContentEditorUrl(this Item i)
@@ -157,19 +157,12 @@ namespace HI.Shared.DataSourceWorkflowModule.Extensions
             return string.Format(ContentEditorUrlFormat, requestUri.Scheme, requestUri.Host, WebUtility.HtmlEncode(i.ID.ToString()), i.Version.Number, i.Language.CultureInfo.Name);
         }
 
-        
+
 
         public static Item GetInternalLinkFieldItem(this Item i, string internalLinkFieldName)
         {
-            if (i == null) return null;
-            InternalLinkField ilf = i.Fields[internalLinkFieldName];
-            if (ilf != null && ilf.TargetItem != null)
-            {
-                return ilf.TargetItem;
-            }
-            return null;
+            InternalLinkField ilf = i?.Fields[internalLinkFieldName];
+            return ilf?.TargetItem;
         }
-
-       
     }
 }
